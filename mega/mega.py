@@ -436,16 +436,16 @@ class Mega(object):
         """
         self._download_file(None, None, file=file[1], dest_path=dest_path, dest_filename=dest_filename, is_public=False)
 
-    def download_url(self, url, dest_path=None, dest_filename=None):
+    def download_url(self, url, dest_path=None, dest_filename=None, resume=False):
         """
         Download a file by it's public url
         """
         path = self._parse_url(url).split('!')
         file_id = path[0]
         file_key = path[1]
-        self._download_file(file_id, file_key, dest_path, dest_filename, is_public=True)
+        self._download_file(file_id, file_key, dest_path, dest_filename, is_public=True, resume=resume)
 
-    def _download_file(self, file_handle, file_key, dest_path=None, dest_filename=None, is_public=False, file=None):
+    def _download_file(self, file_handle, file_key, dest_path=None, dest_filename=None, is_public=False, file=None, resume=False):
         if file is None:
             if is_public:
                 file_key = base64_to_a32(file_key)
@@ -478,14 +478,10 @@ class Mega(object):
         else:
             file_name = attribs['n']
 
-        input_file = requests.get(file_url, stream=True).raw
-
         if dest_path is None:
             dest_path = ''
         else:
             dest_path += '/'
-
-        temp_output_file = tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', delete=False)
 
         k_str = a32_to_str(k)
         counter = Counter.new(
@@ -496,41 +492,96 @@ class Mega(object):
         mac_encryptor = AES.new(k_str, AES.MODE_CBC, mac_str)
         iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
 
-        for chunk_start, chunk_size in get_chunks(file_size):
-            chunk = input_file.read(chunk_size)
-            chunk = aes.decrypt(chunk)
-            temp_output_file.write(chunk)
+        if resume == False:
+            temp_output_file = tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', delete=False)
+            input_file = requests.get(file_url, stream=True).raw
+            for chunk_start, chunk_size in get_chunks(file_size):
+                chunk = input_file.read(chunk_size)
+                chunk = aes.decrypt(chunk)
+                temp_output_file.write(chunk)
 
-            encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
-            for i in range(0, len(chunk)-16, 16):
+                encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
+                for i in range(0, len(chunk)-16, 16):
+                    block = chunk[i:i + 16]
+                    encryptor.encrypt(block)
+
+                #fix for files under 16 bytes failing
+                if file_size > 16:
+                    i += 16
+                else:
+                    i = 0
+
                 block = chunk[i:i + 16]
-                encryptor.encrypt(block)
+                if len(block) % 16:
+                    block += '\0' * (16 - (len(block) % 16))
+                mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
 
-            #fix for files under 16 bytes failing
-            if file_size > 16:
-                i += 16
-            else:
-                i = 0
+                if self.options.get('verbose') is True:
+                    # temp file size
+                    file_info = os.stat(temp_output_file.name)
+                    print('{0} of {1} downloaded'.format(file_info.st_size, file_size))
+        else:
+            startDlAt = 0
+            temp_output_file = open('%s%s.part' % (dest_path, file_handle), 'ab+')
+            if os.path.getsize(temp_output_file.name) > 0:
+                startDlAt = os.path.getsize(temp_output_file.name)
+                if self.options.get('verbose') is True:
+                    print "Resuming DL at: %d bytes" % startDlAt
+            input_file = requests.get('%s/%d-%d' % (file_url,startDlAt,file_size-1), stream=True).raw
 
-            block = chunk[i:i + 16]
-            if len(block) % 16:
-                block += '\0' * (16 - (len(block) % 16))
-            mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
+            # Pull data into temporary encrypted file
+            for chunk_start, chunk_size in get_chunks(file_size):
+                if chunk_start < startDlAt:
+                    #print 'Not writing already downloaded chunk, start: %d, size: %d' % (chunk_start, chunk_size)
+                    continue
 
+                chunk = input_file.read(chunk_size)
+                temp_output_file.write(chunk)
+
+                if self.options.get('verbose') is True:
+                    print('{0} of {1} downloaded'.format(os.path.getsize(temp_output_file.name), file_size))
+            
+            # Decrypt file into destination file
+            output_file = open(dest_path + file_name, 'w+b')
             if self.options.get('verbose') is True:
-                # temp file size
-                file_info = os.stat(temp_output_file.name)
-                print('{0} of {1} downloaded'.format(file_info.st_size, file_size))
+                print('Decrypting "%s" into "%s"' % (temp_output_file.name, output_file.name))
+
+            for chunk_start, chunk_size in get_chunks(file_size):
+                temp_output_file.seek(chunk_start)
+                chunk = temp_output_file.read(chunk_size)
+                chunk = aes.decrypt(chunk)
+                output_file.write(chunk)
+
+                encryptor = AES.new(k_str, AES.MODE_CBC, iv_str)
+                for i in range(0, len(chunk)-16, 16):
+                    block = chunk[i:i + 16]
+                    encryptor.encrypt(block)
+
+                #fix for files under 16 bytes failing
+                if file_size > 16:
+                    i += 16
+                else:
+                    i = 0
+
+                block = chunk[i:i + 16]
+                if len(block) % 16:
+                    block += '\0' * (16 - (len(block) % 16))
+                mac_str = mac_encryptor.encrypt(encryptor.encrypt(block))
+            
+            output_file.close()
 
         file_mac = str_to_a32(mac_str)
 
         temp_output_file.close()
-
+        
         # check mac integrity
         if (file_mac[0] ^ file_mac[1], file_mac[2] ^ file_mac[3]) != meta_mac:
             raise ValueError('Mismatched mac')
-
-        shutil.move(temp_output_file.name, dest_path + file_name)
+        
+        if resume == False:
+            shutil.move(temp_output_file.name, dest_path + file_name)
+        else:
+            os.remove(temp_output_file.name)
 
     ##########################################################################
     # UPLOAD
