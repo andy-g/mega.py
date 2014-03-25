@@ -1,5 +1,5 @@
 # Mega.py
-[![Build Status](https://travis-ci.org/richardasaurus/mega.py.png?branch=master)](https://travis-ci.org/richardasaurus/mega.py)
+[![Build Status](https://travis-ci.org/andy-g/mega.py.png?branch=master)](https://travis-ci.org/andy-g/mega.py)
 [![Downloads](https://pypip.in/d/mega.py/badge.png)](https://crate.io/packages/mega.py/)
 
 Python library for the Mega.co.nz API, currently supporting:
@@ -20,9 +20,15 @@ For more detailed information see API_INFO.md
 
 ### Install mega.py package
 ```python
-#Run the following command, or run setup from the latest github source
+#Run the following command...
 sudo pip install mega.py
 ```
+
+```python
+#...or run setup from the latest github source
+python setup.py install
+```
+
 ### Import mega.py
 ```python
 from mega import Mega
