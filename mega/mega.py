@@ -532,7 +532,6 @@ class Mega(object):
             # Pull data into temporary encrypted file
             for chunk_start, chunk_size in get_chunks(file_size):
                 if chunk_start < startDlAt:
-                    #print 'Not writing already downloaded chunk, start: %d, size: %d' % (chunk_start, chunk_size)
                     continue
 
                 chunk = input_file.read(chunk_size)
