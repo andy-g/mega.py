@@ -6,7 +6,7 @@ from Crypto.Util import Counter
 import os
 import random
 import binascii
-import requests
+import urllib
 import shutil
 from .errors import ValidationError, RequestError
 from .crypto import *
@@ -93,23 +93,16 @@ class Mega(object):
             self.sid = base64_url_encode(sid[:43])
 
     def _api_request(self, data):
-        params = {'id': self.sequence_num}
+        url = '%s://g.api.%s/cs?id=%d%s' % (self.schema, self.domain, self.sequence_num, '&sid=%s' % self.sid if self.sid else '')
         self.sequence_num += 1
-
-        if self.sid:
-            params.update({'sid': self.sid})
 
         #ensure input data is a list
         if not isinstance(data, list):
             data = [data]
 
-        req = requests.post(
-            '{0}://g.api.{1}/cs'.format(self.schema, self.domain),
-            params=params,
-            data=json.dumps(data),
-            timeout=self.timeout)
-        json_resp = json.loads(req.text)
-
+        res = urllib.urlopen(url, json.dumps(data)).read()
+        json_resp = json.loads(res)
+        
         #if numeric error code response
         if isinstance(json_resp, int):
             raise RequestError(json_resp)
@@ -494,7 +487,7 @@ class Mega(object):
 
         if resume == False:
             temp_output_file = tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', delete=False)
-            input_file = requests.get(file_url, stream=True).raw
+            input_file = urllib.urlopen(file_url)
             for chunk_start, chunk_size in get_chunks(file_size):
                 chunk = input_file.read(chunk_size)
                 chunk = aes.decrypt(chunk)
@@ -527,7 +520,7 @@ class Mega(object):
                 startDlAt = os.path.getsize(temp_output_file.name)
                 if self.options.get('verbose') is True:
                     print "Resuming DL at: %d bytes" % startDlAt
-            input_file = requests.get('%s/%d-%d' % (file_url,startDlAt,file_size-1), stream=True).raw
+            input_file = urllib.urlopen('%s/%d-%d' % (file_url,startDlAt,file_size-1))
 
             # Pull data into temporary encrypted file
             for chunk_start, chunk_size in get_chunks(file_size):
@@ -632,16 +625,14 @@ class Mega(object):
 
                 #encrypt file and upload
                 chunk = aes.encrypt(chunk)
-                output_file = requests.post(ul_url + "/" + str(chunk_start),
-                                            data=chunk, timeout=self.timeout)
+                output_file = urllib.urlopen(ul_url + "/" + str(chunk_start), chunk)
                 completion_file_handle = output_file.text
 
                 if self.options.get('verbose') is True:
                     # upload progress
                     print('{0} of {1} uploaded'.format(upload_progress, file_size))
         else:
-            output_file = requests.post(ul_url + "/0",
-                                            data='', timeout=self.timeout)
+            output_file = urllib.urlopen(ul_url + "/0", '')
             completion_file_handle = output_file.text
             
         file_mac = str_to_a32(mac_str)
