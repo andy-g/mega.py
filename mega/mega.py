@@ -11,7 +11,20 @@ import shutil
 from .errors import ValidationError, RequestError
 from .crypto import *
 import tempfile
+from datetime import datetime, timedelta
+import sys
 
+def fmt_s(num):
+    for x in [' b',' KB',' MB',' GB']:
+        if num < 1024.0 and num > -1024.0:
+            return "%3.1f%s" % (num, x)
+        num /= 1024.0
+    return "%3.1f%s" % (num, ' TB')
+
+def fmt_t(time):
+    hours, remainder = divmod(time, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return '%0.0f:%02.0f:%02.0f' % (hours, minutes, seconds)
 
 class Mega(object):
     def __init__(self, options=None):
@@ -485,6 +498,13 @@ class Mega(object):
         mac_encryptor = AES.new(k_str, AES.MODE_CBC, mac_str)
         iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
 
+        if self.options.get('verbose') is True:
+            print '---------------------------------------------------------------------------'
+            print '    %  Received     Total  Time Spent  Time Left   Avg Speed  Current Speed'
+            print '---------------------------------------------------------------------------'
+
+        startTime = datetime.now()
+        lastTime = datetime.now()
         if resume == False:
             temp_output_file = tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', delete=False)
             input_file = urllib.urlopen(file_url)
@@ -531,12 +551,31 @@ class Mega(object):
                 temp_output_file.write(chunk)
 
                 if self.options.get('verbose') is True:
-                    print('{0} of {1} downloaded'.format(os.path.getsize(temp_output_file.name), file_size))
+                    totalDl = chunk_start + chunk_size
+                    totalDuration = (datetime.now() - startTime).total_seconds()
+                    lastDuration  = (datetime.now() - lastTime).total_seconds()
+                    avgSpeed = (totalDl - startDlAt) / totalDuration if totalDuration != 0 else 0
+                    currentSpeed = chunk_size / lastDuration if lastDuration != 0 else 0
+                    timeLeft = timedelta(seconds=((file_size - totalDl) / currentSpeed if currentSpeed != 0 and file_size != totalDl else 0)).total_seconds()
+
+                    #sys.stdout.write("\rDoing  thing  %i" % i)
+                    #print i / total_size
+                    sys.stdout.write('\r%5.1f %9s %9s %11s %10s %9s/s %12s/s' % (
+                        (totalDl / file_size) * 100,
+                        fmt_s(totalDl),
+                        fmt_s(file_size),
+                        fmt_t(totalDuration),
+                        fmt_t(timeLeft) if timeLeft != 0 else '-',
+                        fmt_s(avgSpeed),
+                        fmt_s(currentSpeed)))
+                    sys.stdout.flush()
+
+                    lastTime = datetime.now()
             
             # Decrypt file into destination file
             output_file = open(dest_path + file_name, 'w+b')
             if self.options.get('verbose') is True:
-                print('Decrypting "%s" into "%s"' % (temp_output_file.name, output_file.name))
+                print('\n\nDecrypting "%s" into "%s"' % (temp_output_file.name, output_file.name))
 
             for chunk_start, chunk_size in get_chunks(file_size):
                 temp_output_file.seek(chunk_start)
