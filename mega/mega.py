@@ -498,11 +498,6 @@ class Mega(object):
         mac_encryptor = AES.new(k_str, AES.MODE_CBC, mac_str)
         iv_str = a32_to_str([iv[0], iv[1], iv[0], iv[1]])
 
-        if self.options.get('verbose') is True:
-            print '---------------------------------------------------------------------------'
-            print '    %  Received     Total  Time Spent  Time Left   Avg Speed  Current Speed'
-            print '---------------------------------------------------------------------------'
-
         startTime = datetime.now()
         lastTime = datetime.now()
         if resume == False:
@@ -538,9 +533,15 @@ class Mega(object):
             temp_output_file = open('%s%s.part' % (dest_path, file_handle), 'ab+')
             if os.path.getsize(temp_output_file.name) > 0:
                 startDlAt = os.path.getsize(temp_output_file.name)
-                if self.options.get('verbose') is True:
-                    print "Resuming DL at: %d bytes" % startDlAt
             input_file = urllib.urlopen('%s/%d-%d' % (file_url,startDlAt,file_size-1))
+
+            if self.options.get('verbose') is True:
+                print "Resuming %s from %s" % (file_name, fmt_s(startDlAt)) if startDlAt > 0 else "Downloading: %s" % file_name
+                print '---------------------------------------------------------------------------'
+                print '    %  Received     Total  Time Spent  Time Left   Avg Speed  Current Speed'
+                print '---------------------------------------------------------------------------'
+                sys.stdout.write('\r%5.1f %9s %9s %11s %10s %9s/s %12s/s' % (0,fmt_s(0),fmt_s(file_size),fmt_t(0),'-',fmt_s(0),fmt_s(0)))
+                sys.stdout.flush()
 
             # Pull data into temporary encrypted file
             for chunk_start, chunk_size in get_chunks(file_size):
