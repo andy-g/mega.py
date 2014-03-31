@@ -574,9 +574,9 @@ class Mega(object):
                     lastTime = datetime.now()
             
             # Decrypt file into destination file
-            output_file = open(dest_path + file_name, 'w+b')
             if self.options.get('verbose') is True:
-                print('\n\nDecrypting "%s" into "%s"' % (temp_output_file.name, output_file.name))
+                print('\n\nDecrypting "%s" into "%s"' % (temp_output_file.name, dest_path + file_name))
+            output_file = open(dest_path + file_name, 'w+b')
 
             for chunk_start, chunk_size in get_chunks(file_size):
                 temp_output_file.seek(chunk_start)
