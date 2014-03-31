@@ -562,7 +562,7 @@ class Mega(object):
                     #sys.stdout.write("\rDoing  thing  %i" % i)
                     #print i / total_size
                     sys.stdout.write('\r%5.1f %9s %9s %11s %10s %9s/s %12s/s' % (
-                        (totalDl / file_size) * 100,
+                        (float(totalDl) / file_size) * 100,
                         fmt_s(totalDl),
                         fmt_s(file_size),
                         fmt_t(totalDuration),
