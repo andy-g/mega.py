@@ -6,7 +6,7 @@ from Crypto.Util import Counter
 import os
 import random
 import binascii
-import urllib
+import urllib2
 import shutil
 from .errors import ValidationError, RequestError
 from .crypto import *
@@ -113,7 +113,7 @@ class Mega(object):
         if not isinstance(data, list):
             data = [data]
 
-        res = urllib.urlopen(url, json.dumps(data)).read()
+        res = urllib2.urlopen(url, json.dumps(data)).read()
         json_resp = json.loads(res)
         
         #if numeric error code response
@@ -502,7 +502,7 @@ class Mega(object):
         lastTime = datetime.now()
         if resume == False:
             temp_output_file = tempfile.NamedTemporaryFile(mode='w+b', prefix='megapy_', delete=False)
-            input_file = urllib.urlopen(file_url)
+            input_file = urllib2.urlopen(file_url, timeout=self.timeout)
             for chunk_start, chunk_size in get_chunks(file_size):
                 chunk = input_file.read(chunk_size)
                 chunk = aes.decrypt(chunk)
@@ -533,7 +533,7 @@ class Mega(object):
             temp_output_file = open('%s%s.part' % (dest_path, file_handle), 'ab+')
             if os.path.getsize(temp_output_file.name) > 0:
                 startDlAt = os.path.getsize(temp_output_file.name)
-            input_file = urllib.urlopen('%s/%d-%d' % (file_url,startDlAt,file_size-1))
+            input_file = urllib2.urlopen('%s/%d-%d' % (file_url,startDlAt,file_size-1), timeout=self.timeout)
 
             if self.options.get('verbose') is True:
                 print "Resuming %s from %s" % (file_name, fmt_s(startDlAt)) if startDlAt > 0 else "Downloading: %s" % file_name
@@ -665,14 +665,14 @@ class Mega(object):
 
                 #encrypt file and upload
                 chunk = aes.encrypt(chunk)
-                output_file = urllib.urlopen(ul_url + "/" + str(chunk_start), chunk)
+                output_file = urllib2.urlopen(ul_url + "/" + str(chunk_start), chunk)
                 completion_file_handle = output_file.text
 
                 if self.options.get('verbose') is True:
                     # upload progress
                     print('{0} of {1} uploaded'.format(upload_progress, file_size))
         else:
-            output_file = urllib.urlopen(ul_url + "/0", '')
+            output_file = urllib2.urlopen(ul_url + "/0", '')
             completion_file_handle = output_file.text
             
         file_mac = str_to_a32(mac_str)
